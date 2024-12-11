@@ -48,14 +48,14 @@ app.get("/", (req, res) => {
 app.post("/api/email-event", async (req, res) => {
   const { email, tests, name } = req.body;
 
-  console.log("Request body:", req.body); // Log untuk debugging
+  console.log("Request body:", req.body); // Log for debugging
 
   if (!email || !tests || !name) {
     return res.status(400).json({ error: "Missing required fields" });
   }
 
   try {
-    console.log("Tests received:", tests); // Log data tests untuk debugging
+    console.log("Tests received:", tests); // Log test data for debugging
 
     const mailOptions = {
       from: '"Event Organizer" <your-email@gmail.com>',
@@ -75,8 +75,10 @@ app.post("/api/email-event", async (req, res) => {
       `,
     };
 
-    // Send email logic here (e.g., using nodemailer)
+    // Sending the email using transporter
+    await transporter.sendMail(mailOptions);
 
+    // Respond with success message
     res.status(200).json({ message: 'Email sent successfully!' });
   } catch (error) {
     console.error('Error sending email:', error);
@@ -84,15 +86,6 @@ app.post("/api/email-event", async (req, res) => {
   }
 });
 
-
-    await transporter.sendMail(mailOptions);
-
-    return res.json({ message: "Email sent successfully" });
-  } catch (error) {
-    console.error("Error sending email:", error);
-    return res.status(500).json({ message: error.message });
-  }
-});
 
 // Endpoint untuk assign event
 app.post("/api/assign-event", async (req, res) => {
