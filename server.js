@@ -1,82 +1,114 @@
+require("dotenv").config();
 const express = require("express");
 const bodyParser = require("body-parser");
 const cors = require("cors");
 const midtransClient = require("midtrans-client");
 const nodemailer = require("nodemailer");
+const { initializeApp } = require("firebase/app");
+const { getFirestore, doc, getDoc, collection, query, where, getDocs } = require("firebase/firestore");
+
+// Inisialisasi Firebase
+const firebaseConfig = {
+  apiKey: process.env.FIREBASE_API_KEY,
+  authDomain: process.env.FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.FIREBASE_PROJECT_ID,
+  storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.FIREBASE_APP_ID,
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp);
 
 const app = express();
-app.use(cors());
+app.use(cors()); // Mengaktifkan CORS
 app.use(bodyParser.json());
 
 // Midtrans Configuration
 const snap = new midtransClient.Snap({
-  isProduction: false, // Set to true for production
-  serverKey: "SB-Mid-server-YQSw2xsUVQZ2LjjYdkGmJheg",
-  clientKey: "SB-Mid-client-sRg-V9GHxs9nPSzb",
+  isProduction: false, // Set ke `true` jika menggunakan production
+  serverKey: process.env.SERVER_KEY,
+  clientKey: process.env.CLIENT_KEY,
 });
 
 // Nodemailer Configuration
 const transporter = nodemailer.createTransport({
-  service: "gmail", // Sesuaikan dengan layanan email Anda (e.g., Gmail, Outlook)
+  service: "gmail",
   auth: {
-    user: "agissukmayadi009@gmail.com", // Ganti dengan email pengirim Anda
-    pass: "zzln txdx vvdh kkdn", // Ganti dengan password atau App Password Anda
+    user: process.env.LS_USER,
+    pass: process.env.LS_PASS,
   },
 });
 
+// Endpoint untuk root
 app.get("/", (req, res) => {
-  res.send("Hello World!");
+  res.send("API is working!");
 });
 
 app.post("/api/email-event", async (req, res) => {
   const { email, tests, name } = req.body;
 
+  console.log("Request body:", req.body); // Log untuk debugging
+
+  if (!email || !tests || !name) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
+
   try {
-    // Konfigurasi email
+    console.log("Tests received:", tests); // Log data tests untuk debugging
+
     const mailOptions = {
-      from: '"Event Organizer" <your-email@gmail.com>', // Pengirim
-      to: email, // Penerima
-      subject: "Event Registration Confirmation", // Subjek
+      from: '"Event Organizer" <your-email@gmail.com>',
+      to: email,
+      subject: "Event Registration Confirmation",
       html: `
-        <h1>Hi ${name},</h1>
-        <p>Thank you for registering for the event.</p>
+        <h1>Hello ${name},</h1>
         <p>Here are your test details:</p>
         <ul>
           ${tests
-            .map((test) => `<li>${test.title} : ${test.link}</li>`)
+            .map(
+              (test) =>
+                `<li>${test.title}: <a href="https://test.suxesstories.com/${test.idSurvey}" target="_blank">https://test.suxesstories.com/${test.idSurvey}</a></li>`
+            )
             .join("")}
         </ul>
-        <p>We look forward to seeing you at the event!</p>
-      `, // Konten email dalam format HTML
+      `,
     };
 
-    // Kirim email
+    // Send email logic here (e.g., using nodemailer)
+
+    res.status(200).json({ message: 'Email sent successfully!' });
+  } catch (error) {
+    console.error('Error sending email:', error);
+    res.status(500).json({ error: 'Failed to send email' });
+  }
+});
+
+
     await transporter.sendMail(mailOptions);
 
     return res.json({ message: "Email sent successfully" });
   } catch (error) {
     console.error("Error sending email:", error);
-    return res.status(500).json({
-      message: error.message,
-    });
+    return res.status(500).json({ message: error.message });
   }
 });
 
+// Endpoint untuk assign event
 app.post("/api/assign-event", async (req, res) => {
   const { event, form, tests } = req.body;
 
   try {
-    // Jika pembayaran tidak dibutuhkan
     if (!event.payment) {
-      return res.json({ message: "Registered Success" });
+      return res.json({ message: "Registered successfully" });
     }
 
     // Jika membutuhkan pembayaran, buat transaksi Midtrans
-    const orderId = `EVENT-${event.id}-${Date.now()}`; // Unik setiap transaksi
+    const orderId = `EVENT-${event.id}-${Date.now()}`;
     const parameter = {
       transaction_details: {
         order_id: orderId,
-        gross_amount: parseInt(event.amount), // Pastikan integer
+        gross_amount: parseInt(event.amount),
       },
       customer_details: {
         first_name: form.name,
@@ -85,17 +117,15 @@ app.post("/api/assign-event", async (req, res) => {
       item_details: [
         {
           id: event.id,
-          price: parseInt(event.amount), // Harga harus integer
+          price: parseInt(event.amount),
           quantity: 1,
           name: event.name,
         },
       ],
     };
 
-    // Buat transaksi di Midtrans
     const transaction = await snap.createTransaction(parameter);
 
-    // Kirim token pembayaran ke frontend
     return res.json({
       paymentToken: transaction.token,
       orderId,
@@ -106,8 +136,41 @@ app.post("/api/assign-event", async (req, res) => {
   }
 });
 
+// Endpoint untuk mendapatkan data event dan test dari Firebase
+app.post("/api/get-tests", async (req, res) => {
+  const { eventId } = req.body;
+
+  try {
+    const eventDoc = await getDoc(doc(db, "events", eventId));
+
+    if (!eventDoc.exists()) {
+      return res.status(404).json({ message: "Event not found" });
+    }
+
+    const event = eventDoc.data();
+
+    if (!event.tests || event.tests.length === 0) {
+      return res.json({ message: "No tests associated with this event" });
+    }
+
+    const testsCollection = collection(db, "tests");
+    const q = query(testsCollection, where("id", "in", event.tests));
+    const querySnapshot = await getDocs(q);
+
+    const tests = querySnapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+
+    return res.json({ event, tests });
+  } catch (error) {
+    console.error("Error fetching tests:", error);
+    return res.status(500).json({ message: error.message });
+  }
+});
+
 // Start Server
 const PORT = 5000;
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Server running at http://localhost:${PORT}`);
 });

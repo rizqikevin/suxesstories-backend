@@ -1,15 +1,15 @@
-const firebase = require("firebase");
-// Your web app's Firebase configuration
+const { initializeApp } = require("firebase/app");
+const { getFirestore, doc, getDoc } = require("firebase/firestore");
+// Inisialisasi Firebase
 const firebaseConfig = {
-  apiKey: "AIzaSyBSBHbOjMgpJGSLRoRSQquZ5gAy8NNdHBM",
-  authDomain: "suxesstories-3ee3d.firebaseapp.com",
-  projectId: "suxesstories-3ee3d",
-  storageBucket: "suxesstories-3ee3d.firebasestorage.app",
-  messagingSenderId: "568427976444",
-  appId: "1:568427976444:web:b4ddf7cfda0a2ea8c7a979",
+  apiKey: process.env.FIREBASE_API_KEY,
+  authDomain: process.env.FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.FIREBASE_PROJECT_ID,
+  storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.FIREBASE_APP_ID,
 };
 
-// Initialize Firebase
-const firebaseInit = firebase.initializeApp(firebaseConfig);
+const firebaseApp = initializeApp(firebaseConfig);
 
 module.exports = firebaseInit;
